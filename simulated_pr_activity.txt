@@ -93,3 +93,4 @@ Feature update 92
 Feature update 93
 Feature update 94
 Feature update 95
+Feature update 96
