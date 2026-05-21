@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Grocery Coupon Auto-Clicker</title>
+    <style>
+        body {
+            width: 250px;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #333;
+        }
+        h2 {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #2c3e50;
+        }
+        .status-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #28a745;
+            margin: 5px 0;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #startBtn {
+            background: #007bff;
+            color: white;
+        }
+        #startBtn:hover {
+            background: #0056b3;
+        }
+        #stopBtn {
+            background: #dc3545;
+            color: white;
+        }
+        #stopBtn:hover {
+            background: #c82333;
+        }
+        #optionsBtn {
+            background: #6c757d;
+            color: white;
+        }
+        #optionsBtn:hover {
+            background: #5a6268;
+        }
+        .footer {
+            font-size: 11px;
+            text-align: center;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Coupon Auto-Clicker</h2>
+    
+    <div class="status-box">
+        <div id="statusText">Ready to clip</div>
+        <div class="count" id="clickCount">0</div>
+        <div style="font-size: 12px;">Coupons Clipped</div>
+    </div>
+
+    <button id="startBtn">Start Clipping</button>
+    <button id="stopBtn" style="display: none;">Stop</button>
+    <button id="optionsBtn">Settings</button>
+
+    <div class="footer">
+        Works on CVS, Safeway, Albertsons & more
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

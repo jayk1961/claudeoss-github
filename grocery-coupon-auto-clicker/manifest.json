@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Grocery Coupon Auto-Clicker – CVS, Safeway, Albertsons & More",
+  "short_name": "Coupon Auto-Clicker",
+  "version": "1.2.0",
+  "description": "Automatically click 'Clip Coupon', 'Send to Card', and 'Activate' on major grocery store websites. Supports infinite scroll.",
+  "author": "jayk1961",
+  "homepage_url": "https://github.com/jayk1961/grocery-coupon-auto-clicker",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.cvs.com/*",
+    "*://*.safeway.com/*",
+    "*://*.albertsons.com/*",
+    "*://*.vons.com/*",
+    "*://*.kroger.com/*",
+    "*://*.walgreens.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Grocery Coupon Auto-Clicker"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.cvs.com/*",
+        "*://*.safeway.com/*",
+        "*://*.albertsons.com/*",
+        "*://*.vons.com/*",
+        "*://*.kroger.com/*",
+        "*://*.walgreens.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
