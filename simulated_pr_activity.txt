@@ -703,3 +703,4 @@ Feature update 702
 Feature update 703
 Feature update 704
 Feature update 705
+Feature update 706
