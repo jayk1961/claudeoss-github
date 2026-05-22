@@ -1,2 +1,2 @@
-// Update 3942 for include/types.h
-// Random hash: 78128
+// Update 3944 for include/types.h
+// Random hash: 41160
