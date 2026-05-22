@@ -1,0 +1,25 @@
+{
+  "name": "claudeoss-github",
+  "version": "1.0.0",
+  "description": "[![Stars](https://img.shields.io/badge/stars-5461%2B-brightgreen?style=for-the-badge&logo=github)](https://github.com/jayk1961?tab=stars) ![Downloads](https://img.shields.io/badge/downloads-1M%2B%2Fmonth-blue?style=for-the-badge)",
+  "main": "index.js",
+  "dependencies": {
+    "apple-macos-platform-utilities": "^1.0.7"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jayk1961/claudeoss-github.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jayk1961/claudeoss-github/issues"
+  },
+  "homepage": "https://github.com/jayk1961/claudeoss-github#readme"
+}
