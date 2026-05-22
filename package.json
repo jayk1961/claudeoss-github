@@ -1,6 +1,6 @@
 {
   "name": "claudeoss-github",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Claude + GitHub integration tools, release patching scripts, and macOS utilities aggregator",
   "main": "index.js",
   "bin": {
