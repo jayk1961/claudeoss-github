@@ -21,10 +21,13 @@ for proj in "${PROJECTS[@]}"; do
   echo "Processing $proj..."
   cd "$proj"
   
-  # Ensure package.json exists
-  if [ ! -f package.json ]; then
-    echo '{"name": "'$(echo "$proj" | tr '[:upper:]' '[:lower:]')'", "version": "1.0.0"}' > package.json
+  # Ensure package.json exists and has scoped name for the new ones
+  pkg_name=$(echo "$proj" | tr '[:upper:]' '[:lower:]')
+  if [[ "$proj" == "arora" || "$proj" == "docmanager-nectarine" || "$proj" == "jayk" || "$proj" == "stuffs" ]]; then
+    pkg_name="@jayk1961/$pkg_name"
   fi
+  
+  echo '{"name": "'"$pkg_name"'", "version": "1.0.0"}' > package.json
   
   git add .
   git commit -m "chore: clean up for npm publish"
