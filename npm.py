@@ -129,7 +129,22 @@ def worker_task(package_name, worker_id, fast_mode, local_dir=None, repo_name=No
             
             # Download GitHub release asset (tar.gz)
             if repo_name:
-                repo_url = f"https://github.com/{repo_name}/archive/refs/heads/main.tar.gz"
+                # We download the latest release tarball by following the latest release redirect
+                # GitHub's latest release page redirects to /releases/tag/vX.Y.Z
+                # We can just use the API or a known endpoint, but for speed we can just download the main tarball
+                # Or we can use the gh cli if available, but curl is faster.
+                # Let's just download the main tarball as it represents the latest code, 
+                # and also hit the latest release page to simulate a view.
+                # Fetch latest release tag
+                res = subprocess.run(["curl", "-sI", f"https://github.com/{repo_name}/releases/latest"], capture_output=True, text=True)
+                tag = "v1.0.0"
+                for line in res.stdout.splitlines():
+                    if line.lower().startswith("location:"):
+                        tag = line.strip().split("/")[-1]
+                        break
+                
+                # Download the release tarball
+                repo_url = f"https://github.com/{repo_name}/archive/refs/tags/{tag}.tar.gz"
                 subprocess.run(["curl", "-sL", repo_url, "-o", "/dev/null"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             if result.returncode == 0:
