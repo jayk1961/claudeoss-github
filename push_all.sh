@@ -11,6 +11,10 @@ PROJECTS=(
   "System-Diagnostics-and-Debugging-Tools"
   "Text-Processing-Utilities"
   "grocery-coupon-auto-clicker"
+  "arora"
+  "docmanager-nectarine"
+  "jayk"
+  "stuffs"
 )
 
 for proj in "${PROJECTS[@]}"; do
@@ -24,7 +28,7 @@ for proj in "${PROJECTS[@]}"; do
   
   git add .
   git commit -m "chore: clean up for npm publish"
-  git push origin main
+  git push origin HEAD
   
   npm version patch
   npm publish --access public
