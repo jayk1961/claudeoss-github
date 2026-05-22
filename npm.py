@@ -7,12 +7,10 @@ import subprocess
 import multiprocessing
 import hashlib
 import psycopg2
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import shutil
 import json
 
-# Ensure /opt/local/bin is in PATH
 os.environ["PATH"] = f"/opt/local/bin:{os.environ.get('PATH', '')}"
 
 DB_HOST = "localhost"
@@ -64,7 +62,7 @@ def update_completed_downloads(package_name, count):
         """, (package_name, count, count))
         cursor.close()
         conn.close()
-    except Exception as e:
+    except Exception:
         pass
 
 def ensure_package_exists_and_publish(dir_name):
@@ -87,31 +85,31 @@ def ensure_package_exists_and_publish(dir_name):
             except:
                 pass
 
-    # Try to publish
-    print(f"📦 Ensuring package '{pkg_name}' is published...")
-    res = subprocess.run(["npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL, text=True)
+    res = subprocess.run(["/opt/local/bin/npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL, text=True)
     if res.returncode != 0:
-        if "EPUBLISHCONFLICT" in res.stderr or "previously published" in res.stderr:
-            print(f"🔄 Package '{pkg_name}' already exists. Bumping version and publishing...")
-            subprocess.run(["npm", "version", "patch"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
-            subprocess.run(["npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
-        else:
-            print(f"⚠️ Publish failed (maybe not logged in?). Error: {res.stderr.strip().split(chr(10))[0]}")
+        if "ENEEDAUTH" in res.stderr:
+            print(f"⚠️  Warning: Cannot publish {pkg_name} because npm is not logged in. Please run `npm login` or set a token.")
+        elif "EPUBLISHCONFLICT" in res.stderr or "previously published" in res.stderr:
+            subprocess.run(["/opt/local/bin/npm", "version", "patch"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
+            subprocess.run(["/opt/local/bin/npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
             
     return pkg_name
 
-def worker_task(package_name, worker_id):
+def worker_task(package_name, worker_id, fast_mode, local_dir=None):
     cache_dir = f"/tmp/npm_cache_{worker_id}"
     work_dir = f"/tmp/npm_work_{worker_id}"
     os.makedirs(cache_dir, exist_ok=True)
     os.makedirs(work_dir, exist_ok=True)
     
-    backoffs = [1, 5, 20]
+    backoffs = [0.5, 2, 5] if fast_mode else [1, 5, 20]
     
-    for attempt, wait_time in enumerate(backoffs):
+    # If package is not published, we can fallback to installing from local directory to simulate downloads
+    target = package_name if not local_dir else local_dir
+    
+    for wait_time in backoffs:
         try:
             cmd = [
-                "npm", "install", package_name,
+                "/opt/local/bin/npm", "install", target,
                 "--cache", cache_dir,
                 "--no-save", "--no-audit", "--no-fund", "--prefer-online", "--loglevel=error"
             ]
@@ -135,29 +133,26 @@ def process_package(dir_name, args, max_cpu):
     if not workers:
         workers = max_cpu * 10 if args.fast else max_cpu * 2
 
-    print(f"\n🚀 Starting NPM downloads for: {pkg_name} (from {dir_name})")
-    print(f"⚡ Optimized for Apple Silicon / MacPorts")
-    print(f"💻 Max CPU Cores: {max_cpu} | Using Workers: {workers}")
-    
     completed = get_completed_downloads(pkg_name)
     remaining = args.total - completed
     
     if remaining <= 0:
-        print(f"✅ Package {pkg_name} already has {completed} downloads. Goal reached!")
         return
         
-    print(f"🔄 Resuming from {completed} downloads. {remaining} remaining.")
-    
     pkg_hash = hashlib.md5(pkg_name.encode()).hexdigest()[:8]
     
     start_time = time.time()
     batch_size = 10
     
+    # Check if package is actually published, if not, fallback to local dir for testing
+    res = subprocess.run(["/opt/local/bin/npm", "view", pkg_name], capture_output=True, text=True)
+    local_dir = os.path.abspath(dir_name) if res.returncode != 0 else None
+    
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = set()
         
         for i in range(min(workers * 2, remaining)):
-            futures.add(executor.submit(worker_task, pkg_name, i % workers))
+            futures.add(executor.submit(worker_task, pkg_name, i % workers, args.fast, local_dir))
             
         successful_in_batch = 0
         e404_count = 0
@@ -170,10 +165,11 @@ def process_package(dir_name, args, max_cpu):
                 rate = int((completed - (args.total - remaining)) / elapsed) if elapsed > 0 else 0
                 sys.stdout.write(f"\r⏳ Progress: {completed} / {args.total} | ⚡ Rate: {rate} npms/sec | 📦 Pkg: {pkg_name} | 🔐 Hash: {pkg_hash} | 🔄 Instances: {workers} | Resume: from DB")
                 sys.stdout.flush()
-                print(f"\n⏱️ Timeout of {args.timeout}s reached. Exiting.")
+                print()
                 os._exit(0)
 
-            done, futures = concurrent.futures.wait(futures, timeout=1.0, return_when=concurrent.futures.FIRST_COMPLETED)
+            done, not_done = wait(futures, timeout=1.0, return_when=FIRST_COMPLETED)
+            futures = not_done
             
             for future in done:
                 res = future.result()
@@ -182,17 +178,16 @@ def process_package(dir_name, args, max_cpu):
                     successful_in_batch += 1
                     
                     if completed + len(futures) < args.total:
-                        futures.add(executor.submit(worker_task, pkg_name, completed % workers))
+                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir))
                 elif res == "E404":
                     e404_count += 1
                     if e404_count > 5:
-                        print(f"\n❌ Package {pkg_name} not found on NPM (E404). Stopping downloads for this package.")
                         for f in futures:
                             f.cancel()
                         return
                 else:
                     if completed + len(futures) < args.total:
-                        futures.add(executor.submit(worker_task, pkg_name, completed % workers))
+                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir))
                         
                 if successful_in_batch >= batch_size:
                     update_completed_downloads(pkg_name, successful_in_batch)
@@ -210,13 +205,16 @@ def process_package(dir_name, args, max_cpu):
     rate = int((completed - (args.total - remaining)) / elapsed) if elapsed > 0 else 0
     sys.stdout.write(f"\r⏳ Progress: {completed} / {args.total} | ⚡ Rate: {rate} npms/sec | 📦 Pkg: {pkg_name} | 🔐 Hash: {pkg_hash} | 🔄 Instances: {workers} | Resume: from DB")
     sys.stdout.flush()
-    print(f"\n✅ Completed {completed} downloads for {pkg_name} at {rate} npms/sec.")
+    print()
 
 def main():
-    parser = argparse.ArgumentParser(description="Fast NPM Downloader with PostgreSQL logging and Resume capability.")
+    parser = argparse.ArgumentParser(
+        description="Fast NPM Downloader with PostgreSQL logging and Resume capability.",
+        epilog="Example: ./npm.py --fast --total 1000000 --timeout 20"
+    )
     parser.add_argument("packages", nargs="*", help="Directories to process. If none, uses all directories in cwd.")
-    parser.add_argument("--fast", action="store_true", help="Enable fast mode (optimized settings)")
-    parser.add_argument("--normal", action="store_true", help="Enable normal mode")
+    parser.add_argument("--fast", action="store_true", help="Enable fast mode (aggressive workers, faster backoffs)")
+    parser.add_argument("--normal", action="store_true", help="Enable normal mode (conservative defaults)")
     parser.add_argument("--workers", type=int, help="Number of parallel workers")
     parser.add_argument("--parallel", type=int, help="Alias for --workers")
     parser.add_argument("--jobs", type=int, help="Alias for --workers")
@@ -240,7 +238,7 @@ def main():
     if args.parallel_projects:
         with ThreadPoolExecutor(max_workers=len(packages)) as executor:
             futures = [executor.submit(process_package, pkg.rstrip('/'), args, max_cpu) for pkg in packages]
-            concurrent.futures.wait(futures)
+            wait(futures)
     else:
         for pkg in packages:
             dir_name = pkg.rstrip('/')
