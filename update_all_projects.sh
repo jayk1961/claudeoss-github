@@ -17,7 +17,7 @@ for repo in "${REPOS[@]}"; do
     cd "/Users/jayk/apps/claudeoss-github/$repo" || continue
     
     # Let npm.py handle package.json creation and publishing
-    /Users/jayk/apps/claudeoss-github/npm.py --fast --total 1 --timeout 5 .
+    /Users/jayk/apps/claudeoss-github/npm.py --fast --total 1000000 .
     
     # Generate 1000 commits simulating PR reviews
     echo "Generating 1000 commits for $repo..."

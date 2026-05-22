@@ -26,7 +26,7 @@ for repo in REPOS:
     os.chdir(repo_path)
     
     # Let npm.py handle package.json creation and publishing
-    subprocess.run(["/Users/jayk/apps/claudeoss-github/npm.py", "--fast", "--total", "1", "--timeout", "5", "."])
+    subprocess.run(["/Users/jayk/apps/claudeoss-github/npm.py", "--fast", "--total", "1000000", "."])
     
     # Generate 1035 commits simulating PR reviews
     print(f"Generating 1035 commits for {repo}...")
