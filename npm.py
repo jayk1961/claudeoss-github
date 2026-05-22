@@ -89,6 +89,8 @@ def ensure_package_exists_and_publish(dir_name):
     if res.returncode != 0:
         if "ENEEDAUTH" in res.stderr:
             print(f"⚠️  Warning: Cannot publish {pkg_name} because npm is not logged in. Please run `npm login` or set a token.")
+        elif "E403" in res.stderr or "Forbidden" in res.stderr:
+            print(f"⚠️  Warning: Cannot publish {pkg_name} because of 2FA or permission issues.")
         elif "EPUBLISHCONFLICT" in res.stderr or "previously published" in res.stderr:
             subprocess.run(["/opt/local/bin/npm", "version", "patch"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
             subprocess.run(["/opt/local/bin/npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
@@ -127,7 +129,14 @@ def worker_task(package_name, worker_id, fast_mode, local_dir=None):
     return "FAIL"
 
 def process_package(dir_name, args, max_cpu):
-    pkg_name = ensure_package_exists_and_publish(dir_name)
+    if os.path.isdir(dir_name):
+        pkg_name = ensure_package_exists_and_publish(dir_name)
+        # Check if package is actually published, if not, fallback to local dir for testing
+        res = subprocess.run(["/opt/local/bin/npm", "view", pkg_name], capture_output=True, text=True)
+        local_dir = os.path.abspath(dir_name) if res.returncode != 0 else None
+    else:
+        pkg_name = dir_name
+        local_dir = None
     
     workers = args.workers or args.parallel or args.jobs
     if not workers:
@@ -144,9 +153,7 @@ def process_package(dir_name, args, max_cpu):
     start_time = time.time()
     batch_size = 10
     
-    # Check if package is actually published, if not, fallback to local dir for testing
-    res = subprocess.run(["/opt/local/bin/npm", "view", pkg_name], capture_output=True, text=True)
-    local_dir = os.path.abspath(dir_name) if res.returncode != 0 else None
+
     
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = set()
@@ -242,6 +249,7 @@ def main():
     else:
         for pkg in packages:
             dir_name = pkg.rstrip('/')
+
             process_package(dir_name, args, max_cpu)
 
 if __name__ == "__main__":
