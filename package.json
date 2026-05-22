@@ -1,23 +1,40 @@
 {
   "name": "claudeoss-github",
   "version": "1.0.0",
-  "description": "[![Stars](https://img.shields.io/badge/stars-5461%2B-brightgreen?style=for-the-badge&logo=github)](https://github.com/jayk1961?tab=stars) ![Downloads](https://img.shields.io/badge/downloads-1M%2B%2Fmonth-blue?style=for-the-badge)",
+  "description": "Claude + GitHub integration tools, release patching scripts, and macOS utilities aggregator",
   "main": "index.js",
-  "dependencies": {
-    "apple-macos-platform-utilities": "^1.0.7"
+  "bin": {
+    "claudeoss-github": "./bin/cli.js"
   },
-  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jayk1961/claudeoss-github.git"
+    "url": "https://github.com/jayk1961/claudeoss-github.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "claude",
+    "github",
+    "ai",
+    "release",
+    "patching",
+    "macos",
+    "utilities"
+  ],
+  "author": "jayk1961",
+  "license": "MIT",
   "type": "commonjs",
+  "files": [
+    "bin/",
+    "*.js",
+    "*.sh",
+    "!__pycache__/",
+    "!*.log"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bugs": {
     "url": "https://github.com/jayk1961/claudeoss-github/issues"
   },
