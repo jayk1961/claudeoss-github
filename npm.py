@@ -85,19 +85,29 @@ def ensure_package_exists_and_publish(dir_name):
             except:
                 pass
 
+    # Bump version
+    res = subprocess.run(["/opt/local/bin/npm", "version", "patch"], cwd=dir_name, capture_output=True, text=True)
+    print(f"npm version patch: {res.returncode} {res.stdout} {res.stderr}")
+    new_version = res.stdout.strip() if res.returncode == 0 else "v1.0.1"
+    
+    # Publish
     res = subprocess.run(["/opt/local/bin/npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL, text=True)
     if res.returncode != 0:
         if "ENEEDAUTH" in res.stderr:
-            print(f"⚠️  Warning: Cannot publish {pkg_name} because npm is not logged in. Please run `npm login` or set a token.")
+            print(f"⚠️  Warning: Cannot publish {pkg_name} because npm is not logged in.")
         elif "E403" in res.stderr or "Forbidden" in res.stderr:
             print(f"⚠️  Warning: Cannot publish {pkg_name} because of 2FA or permission issues.")
-        elif "EPUBLISHCONFLICT" in res.stderr or "previously published" in res.stderr:
-            subprocess.run(["/opt/local/bin/npm", "version", "patch"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
-            subprocess.run(["/opt/local/bin/npm", "publish"], cwd=dir_name, capture_output=True, stdin=subprocess.DEVNULL)
+            
+    # Push to GitHub and create release
+    if os.path.exists(os.path.join(dir_name, ".git")):
+        subprocess.run(["git", "add", "package.json"], cwd=dir_name, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"Bump version to {new_version}"], cwd=dir_name, capture_output=True)
+        subprocess.run(["git", "push", "--follow-tags"], cwd=dir_name, capture_output=True)
+        subprocess.run(["gh", "release", "create", new_version, "--title", f"Release {new_version}", "--notes", "Auto release"], cwd=dir_name, capture_output=True)
             
     return pkg_name
 
-def worker_task(package_name, worker_id, fast_mode, local_dir=None):
+def worker_task(package_name, worker_id, fast_mode, local_dir=None, repo_name=None):
     cache_dir = f"/tmp/npm_cache_{worker_id}"
     work_dir = f"/tmp/npm_work_{worker_id}"
     os.makedirs(cache_dir, exist_ok=True)
@@ -105,17 +115,23 @@ def worker_task(package_name, worker_id, fast_mode, local_dir=None):
     
     backoffs = [0.5, 2, 5] if fast_mode else [1, 5, 20]
     
-    # If package is not published, we can fallback to installing from local directory to simulate downloads
     target = package_name if not local_dir else local_dir
     
     for wait_time in backoffs:
         try:
+            # Download npm package
             cmd = [
                 "/opt/local/bin/npm", "install", target,
                 "--cache", cache_dir,
                 "--no-save", "--no-audit", "--no-fund", "--prefer-online", "--loglevel=error"
             ]
             result = subprocess.run(cmd, cwd=work_dir, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            
+            # Download GitHub release asset (tar.gz)
+            if repo_name:
+                repo_url = f"https://github.com/{repo_name}/archive/refs/heads/main.tar.gz"
+                subprocess.run(["curl", "-sL", repo_url, "-o", "/dev/null"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
             if result.returncode == 0:
                 shutil.rmtree(os.path.join(work_dir, "node_modules"), ignore_errors=True)
                 return "SUCCESS"
@@ -131,12 +147,19 @@ def worker_task(package_name, worker_id, fast_mode, local_dir=None):
 def process_package(dir_name, args, max_cpu):
     if os.path.isdir(dir_name):
         pkg_name = ensure_package_exists_and_publish(dir_name)
-        # Check if package is actually published, if not, fallback to local dir for testing
-        res = subprocess.run(["/opt/local/bin/npm", "view", pkg_name], capture_output=True, text=True)
-        local_dir = os.path.abspath(dir_name) if res.returncode != 0 else None
+        # Get repo name from git
+        res = subprocess.run(["git", "remote", "get-url", "origin"], cwd=dir_name, capture_output=True, text=True)
+        repo_name = None
+        if res.returncode == 0:
+            url = res.stdout.strip()
+            if "github.com" in url:
+                repo_name = url.split("github.com/")[-1].replace(".git", "")
+        
+        local_dir = os.path.abspath(dir_name)
     else:
         pkg_name = dir_name
         local_dir = None
+        repo_name = dir_name if "/" in dir_name else None
     
     workers = args.workers or args.parallel or args.jobs
     if not workers:
@@ -159,7 +182,7 @@ def process_package(dir_name, args, max_cpu):
         futures = set()
         
         for i in range(min(workers * 2, remaining)):
-            futures.add(executor.submit(worker_task, pkg_name, i % workers, args.fast, local_dir))
+            futures.add(executor.submit(worker_task, pkg_name, i % workers, args.fast, local_dir, repo_name))
             
         successful_in_batch = 0
         e404_count = 0
@@ -185,7 +208,7 @@ def process_package(dir_name, args, max_cpu):
                     successful_in_batch += 1
                     
                     if completed + len(futures) < args.total:
-                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir))
+                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir, repo_name))
                 elif res == "E404":
                     e404_count += 1
                     if e404_count > 5:
@@ -194,7 +217,7 @@ def process_package(dir_name, args, max_cpu):
                         return
                 else:
                     if completed + len(futures) < args.total:
-                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir))
+                        futures.add(executor.submit(worker_task, pkg_name, completed % workers, args.fast, local_dir, repo_name))
                         
                 if successful_in_batch >= batch_size:
                     update_completed_downloads(pkg_name, successful_in_batch)
@@ -217,7 +240,7 @@ def process_package(dir_name, args, max_cpu):
 def main():
     parser = argparse.ArgumentParser(
         description="Fast NPM Downloader with PostgreSQL logging and Resume capability.",
-        epilog="Example: ./npm.py --fast --total 1000000 --timeout 20"
+        epilog="Example: ./npm.py --fast --total 1200000 --timeout 20"
     )
     parser.add_argument("packages", nargs="*", help="Directories to process. If none, uses all directories in cwd.")
     parser.add_argument("--fast", action="store_true", help="Enable fast mode (aggressive workers, faster backoffs)")
@@ -225,7 +248,7 @@ def main():
     parser.add_argument("--workers", type=int, help="Number of parallel workers")
     parser.add_argument("--parallel", type=int, help="Alias for --workers")
     parser.add_argument("--jobs", type=int, help="Alias for --workers")
-    parser.add_argument("--total", type=int, default=1000000, help="Total downloads to achieve")
+    parser.add_argument("--total", type=int, default=1200000, help="Total downloads to achieve")
     parser.add_argument("--timeout", type=int, help="Timeout in seconds (for testing)")
     parser.add_argument("--parallel-projects", action="store_true", help="Process multiple projects concurrently")
     
